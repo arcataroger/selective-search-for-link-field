@@ -29,7 +29,7 @@ type ModelDataByModelId = {
   };
 };
 
-type SwitchFieldOptions = {
+export type SwitchFieldOptions = {
   label: string;
   value: string;
 };
