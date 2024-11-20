@@ -1,0 +1,43 @@
+{
+  "name": "datocms-plugin-selective-search-for-link-field",
+  "description": "Allows you to limit the fields searched in a Link field. This helps with performance and prevents timeouts on larger datasets.",
+  "homepage": "https://github.com/<USER>/<REPO>",
+  "private": false,
+  "version": "0.1.0",
+  "author": "Roger Tuan (DatoCMS Support) <r.tuan@datocms.com>",
+  "type": "module",
+  "keywords": [
+    "datocms-plugin"
+  ],
+  "datoCmsPlugin": {
+    "title": "Selective Search for Link Field",
+    "coverImage": "docs/cover-1200x800.png",
+    "previewImage": "docs/preview.mp4",
+    "entryPoint": "dist/index.html",
+    "permissions": ["currentUserAccessToken"]
+  },
+  "files": [
+    "dist",
+    "docs"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "datocms-plugin-sdk": "^2.0.9",
+    "datocms-react-ui": "^2.0.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "globals": "^15.9.0",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.1"
+  }
+}
