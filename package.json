@@ -1,7 +1,7 @@
 {
   "name": "datocms-plugin-selective-search-for-link-field",
   "description": "Allows you to limit the fields searched in a Link field. This helps with performance and prevents timeouts on larger datasets.",
-  "homepage": "https://github.com/<USER>/<REPO>",
+  "homepage": "https://github.com/arcataroger/selective-search-for-link-field",
   "private": false,
   "version": "0.1.0",
   "author": "Roger Tuan (DatoCMS Support) <r.tuan@datocms.com>",
