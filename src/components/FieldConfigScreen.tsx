@@ -10,7 +10,8 @@ type PropTypes = {
 
 // this is how we want to save our settings
 export type PluginParams = {
-  selectedFieldsByModelId: FormValuesByModelId;
+  formValuesByModelId: FormValuesByModelId;
+  modelDataByModelId: ModelDataByModelId;
 };
 
 type ValidatorForLinkFields = {
@@ -19,7 +20,7 @@ type ValidatorForLinkFields = {
   };
 };
 
-type FieldDataByModelId = {
+type ModelDataByModelId = {
   [modelId: string]: {
     modelName: string;
     modelApiKey: string;
@@ -57,11 +58,11 @@ export const FieldConfigScreen = ({ ctx }: PropTypes) => {
     item_item_type: { item_types: relatedModelIds },
   } = validators as ValidatorForLinkFields;
 
-  const [validFieldsPerModel, setValidFieldsPerModel] =
-    useState<FieldDataByModelId | null>(null);
+  const [cachedModelDataByModel, setCachedModelDataByModel] =
+    useState<ModelDataByModelId>({});
 
   const [selectedFormFieldsByModel, setSelectedFormFieldsByModel] =
-    useState<FormValuesByModelId>(parameters.selectedFieldsByModelId ?? {});
+    useState<FormValuesByModelId>(parameters.formValuesByModelId ?? {});
 
   useEffect(() => {
     const fetchFields = async () => {
@@ -71,6 +72,7 @@ export const FieldConfigScreen = ({ ctx }: PropTypes) => {
             relatedModelIds.map(async (modelId) => {
               const fieldsForThisItemType =
                 await ctx.loadItemTypeFields(modelId);
+
               const searchableFieldIds = fieldsForThisItemType
                 .filter((field) =>
                   SEARCHABLE_FIELD_TYPES.includes(field.attributes.field_type),
@@ -89,7 +91,7 @@ export const FieldConfigScreen = ({ ctx }: PropTypes) => {
             }),
           ),
         );
-        setValidFieldsPerModel(fieldsFromCtx);
+        setCachedModelDataByModel(fieldsFromCtx);
       } catch (error) {
         console.error("Error fetching fields:", error);
       }
@@ -106,21 +108,28 @@ export const FieldConfigScreen = ({ ctx }: PropTypes) => {
       ...prevState,
       [modelId]: newValue,
     }));
-    ctx.setParameters({
+
+    const newParams:PluginParams = {
       ...parameters,
-      selectedFieldsByModelId: {
-        ...parameters.selectedFieldsByModelId,
+      formValuesByModelId: {
+        ...parameters.formValuesByModelId,
         [modelId]: newValue,
-      }
-    } as unknown as PluginParams);
+      },
+      modelDataByModelId: {
+        ...parameters.modelDataByModelId,
+        [modelId]: cachedModelDataByModel[modelId],
+      },
+    }
+
+    ctx.setParameters(newParams);
   };
 
   return (
     <Canvas ctx={ctx}>
-      {validFieldsPerModel ? (
+      {!!Object.keys(cachedModelDataByModel).length ? (
         <Form>
           <h3>Which related fields should be searchable?</h3>
-          {Object.entries(validFieldsPerModel).map(([modelId, model]) => (
+          {Object.entries(cachedModelDataByModel).map(([modelId, model]) => (
             <div id={modelId} key={modelId}>
               <h4
                 dangerouslySetInnerHTML={{

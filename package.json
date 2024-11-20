@@ -14,7 +14,9 @@
     "coverImage": "docs/cover-1200x800.png",
     "previewImage": "docs/preview.mp4",
     "entryPoint": "dist/index.html",
-    "permissions": ["currentUserAccessToken"]
+    "permissions": [
+      "currentUserAccessToken"
+    ]
   },
   "files": [
     "dist",
@@ -27,6 +29,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "@datocms/cma-client-browser": "^3.3.15",
     "datocms-plugin-sdk": "^2.0.9",
     "datocms-react-ui": "^2.0.9",
     "react": "^18.3.1",
@@ -37,8 +40,8 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "globals": "^15.9.0",
+    "prettier": "^3.3.3",
     "typescript": "^5.5.3",
-    "vite": "^5.4.1",
-    "prettier": "^3.3.3"
+    "vite": "^5.4.1"
   }
 }
