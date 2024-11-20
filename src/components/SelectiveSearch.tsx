@@ -1,4 +1,4 @@
-import { AsyncSelectField, Canvas, Form } from "datocms-react-ui";
+import {AsyncSelectField, Canvas, Form, Spinner} from "datocms-react-ui";
 import { RenderFieldExtensionCtx } from "datocms-plugin-sdk";
 import {
   basicOptionFormatter,
@@ -11,6 +11,7 @@ import {
 } from "@datocms/cma-client-browser";
 import { useEffect, useState } from "react";
 import type { MultiValue, SingleValue } from "react-select";
+import {debounce} from "../utils/debounce.ts";
 
 type PropTypes = {
   ctx: RenderFieldExtensionCtx;
@@ -165,6 +166,7 @@ export const SelectiveSearch = ({ ctx }: PropTypes) => {
     })();
   }, [savedValue]);
 
+
   const selectFieldId = `${fieldPath}-selective-search}`;
 
   return (
@@ -177,8 +179,11 @@ export const SelectiveSearch = ({ ctx }: PropTypes) => {
           selectInputProps={{
             isMulti: isMultiLinkField,
             cacheOptions: true,
-            loadOptions: searchRecords,
+            loadOptions: debounce(searchRecords),
             isClearable: true,
+            defaultOptions: true,
+            loadingMessage: () => <span><Spinner/> Searching...</span>,
+            noOptionsMessage: () => 'No matching records found.',
           }}
           value={selectedOptions}
           onChange={(newValue) =>
