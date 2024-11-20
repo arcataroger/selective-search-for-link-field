@@ -143,43 +143,62 @@ export const FieldConfigScreen = ({
       {isModelDataLoaded ? (
         <Form style={{ paddingBottom: "5em" }}>
           <h3>Which related fields should be searchable?</h3>
-          {Object.entries(modelDataByModelId).map(([modelId, model]) => (
-            <div id={modelId} key={modelId}>
-              <h4>
-                For the &quot;{model.modelLabel}&quot; model (
-                <code>{model.modelApiKey}</code>)
-              </h4>
-              <SelectField
-                name={modelId}
-                id={modelId}
-                label={`Fields for ${model.modelLabel}`}
-                hint={
-                  "Only string and multi-line text fields can be searched by this plugin."
-                }
-                value={selectedFormFieldsByModel[modelId]}
-                selectInputProps={{
-                  isMulti: true,
-                  options: model.relatedFieldData
-                    .filter((field) =>
-                      SEARCHABLE_FIELD_TYPES.includes(
-                        field.attributes.field_type,
-                      ),
-                    )
-                    .sort(
-                      (a, b) => a.attributes.position - b.attributes.position,
-                    )
-                    .map((field) =>
-                      basicOptionFormatter({
-                        itemId: field.id,
-                        itemLabel: `${field.attributes.label} (${field.attributes.api_key})`,
-                      }),
-                    ),
-                  // formatOptionLabel: advancedOptionLabelFormatter, // TODO: add advanced formatting
-                }}
-                onChange={(newValue) => handleChange(newValue, modelId)}
-              />
-            </div>
-          ))}
+          <p>
+            Please note: Only string and multi-line text fields can be searched
+            by this plugin.
+          </p>
+          {Object.entries(modelDataByModelId).map(([modelId, model]) => {
+            const searchableFields: SwitchFieldOptions[] =
+              model.relatedFieldData
+                .filter((field) =>
+                  SEARCHABLE_FIELD_TYPES.includes(field.attributes.field_type),
+                )
+                .sort((a, b) => a.attributes.position - b.attributes.position)
+                .map((field) =>
+                  basicOptionFormatter({
+                    itemId: field.id,
+                    itemLabel: `${field.attributes.label} (${field.attributes.api_key})`,
+                  }),
+                );
+
+            const numOfNonSearchableFields: number =
+              model.relatedFieldData.length - searchableFields.length;
+
+            return (
+              <div id={modelId} key={modelId}>
+                <SelectField
+                  name={modelId}
+                  id={modelId}
+                  label={
+                    <h4 style={{ margin: 0 }}>
+                      {model.modelLabel} model (<code>{model.modelApiKey}</code>
+                      )
+                    </h4>
+                  }
+                  value={selectedFormFieldsByModel[modelId]}
+                  hint={
+                    <>
+                      {selectedFormFieldsByModel[modelId].length}/
+                      {searchableFields.length} fields selected.{" "}
+                      {numOfNonSearchableFields > 0 && (
+                        <>
+                          This model has {numOfNonSearchableFields} other
+                          non-string fields that cannot be searched by this
+                          plugin.
+                        </>
+                      )}
+                    </>
+                  }
+                  selectInputProps={{
+                    isMulti: true,
+                    options: searchableFields,
+                    // formatOptionLabel: advancedOptionLabelFormatter, // TODO: add advanced formatting
+                  }}
+                  onChange={(newValue) => handleChange(newValue, modelId)}
+                />
+              </div>
+            );
+          })}
         </Form>
       ) : (
         <>
