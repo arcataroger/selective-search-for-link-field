@@ -1,120 +1,29 @@
-import { RenderManualFieldExtensionConfigScreenCtx } from "datocms-plugin-sdk";
-import { Canvas, Form, SelectField, Spinner } from "datocms-react-ui";
-import type { SchemaTypes } from "@datocms/cma-client";
-import type { MultiValue } from "react-select";
-import { useEffect, useState } from "react";
+import {RenderManualFieldExtensionConfigScreenCtx} from "datocms-plugin-sdk";
+import {Canvas, Form, SelectField, Spinner} from "datocms-react-ui";
+import type {SchemaTypes} from "@datocms/cma-client";
+import type {MultiValue} from "react-select";
+import {useEffect, useState} from "react";
+import type {
+    FormOptionsByModelId,
+    ModelDataByModelId,
+    PluginParams,
+    SwitchFieldOptions,
+    ValidatorForLinkFields,
+} from "../types";
+import {basicOptionFormatter} from "../utils/basicOptionFormatter.ts";
 
-type PropTypes = {
+/**
+ * Configuration screen for the field extension.
+ *
+ * @param props - The props for the component.
+ * @param props.ctx - Plugin context for a field extension config screen (see https://www.datocms.com/docs/plugin-sdk/manual-field-extensions#add-per-field-config-screens-to-manual-field-extensions)
+ */
+export const FieldConfigScreen = ({
+  ctx,
+}: {
   ctx: RenderManualFieldExtensionConfigScreenCtx;
-};
-
-// this is how we want to save our settings
-export type PluginParams = {
-  selectedFieldsAsFormOptionsByModelId: FormOptionsByModelId;
-  relatedModelsById: ModelDataByModelId;
-  pluginVersion: string;
-};
-
-type ValidatorForLinkFields = {
-  item_item_type: {
-    item_types: string[]; // Replace `any` with the appropriate type for `item_types`
-  };
-};
-
-type ModelDataByModelId = {
-  [modelId: string]: {
-    modelLabel: string;
-    modelApiKey: string;
-    titleFieldId?: string;
-    titleFieldApiKey?: string;
-    titleFieldLabel?: string;
-    relatedFieldData: SchemaTypes.Field[];
-    searchableFieldIds: string[];
-    numberOfSearchableFields: number;
-  };
-};
-
-export type SwitchFieldOptions = {
-  label: string;
-  value: string;
-};
-
-type FormOptionsByModelId = {
-  [modelId: string]: MultiValue<SwitchFieldOptions>;
-};
-
-// We can only use this plugin on single and multi line string fields
-// TODO add other supported field types
-const SEARCHABLE_FIELD_TYPES: SchemaTypes.FieldAttributes["field_type"][] = [
-  "string",
-  "text",
-];
-
-export const basicOptionFormatter = ({
-  itemId,
-  itemLabel,
-  modelLabel,
-                                       showItemIdWithModelLabel=false,
-}: {
-  itemId: string;
-  itemLabel?: string;
-  modelLabel?: string;
-  showItemIdWithModelLabel?: boolean;
-}): SwitchFieldOptions => {
-  // Generate a label... this was clearer than a multi-level nested ternary
-  const label: string = (() => {
-    if (itemLabel && modelLabel) {
-      if (showItemIdWithModelLabel) {return `${itemLabel} (${modelLabel} #${itemId})`}
-      return `${itemLabel} (${modelLabel})`
-    }
-
-    if (itemLabel && !modelLabel) {
-      return itemLabel;
-    }
-
-    if (modelLabel && !itemLabel) {
-      return `Record ${itemId} (${modelLabel}`;
-    }
-
-    return `Record ${itemId}`;
-  })();
-
-  return {
-    label: label,
-    value: itemId,
-  };
-};
-
-// @ts-ignore TODO fix advanced formatter
-const advancedOptionLabelFormatter = ({
-  isValid = true,
-  isDraft = false,
-  itemLabel,
-  modelLabel,
-  itemId,
-}: {
-  isValid?: boolean;
-  isDraft?: boolean;
-  itemLabel: string;
-  modelLabel: string;
-  itemId: string;
 }) => {
-  const hasStatus: boolean = isDraft || !isValid;
-
-  return (
-    <div className="BelongsToInput__option">
-      {hasStatus && `(${!isValid && "Invalid "}${isDraft && "Draft"}) `}
-      {itemLabel}
-      {modelLabel && (
-        <span className="BelongsToInput__item-id">
-          {modelLabel} #{itemId}
-        </span>
-      )}
-    </div>
-  );
-};
-
-export const FieldConfigScreen = ({ ctx }: PropTypes) => {
+  // Extract necessary properties from the context.
   const {
     pendingField: {
       attributes: { validators },
@@ -124,30 +33,45 @@ export const FieldConfigScreen = ({ ctx }: PropTypes) => {
     loadItemTypeFields,
   } = ctx;
 
+  // We can only use this plugin on single and multi-line string fields.
+  // TODO: Add other supported field types.
+  const SEARCHABLE_FIELD_TYPES: SchemaTypes.FieldAttributes["field_type"][] = [
+    "string",
+    "text",
+  ];
+
+  // Extract plugin parameters from context.
   const { parameters } = ctx as unknown as { parameters: PluginParams };
 
+  // Get the list of related model IDs from the field validators.
   const {
     item_item_type: { item_types: relatedModelIds },
   } = validators as ValidatorForLinkFields;
 
-  const [cachedModelDataByModel, setCachedModelDataByModel] =
+  // State to store data about related models.
+  const [modelDataByModelId, setModelDataByModelId] =
     useState<ModelDataByModelId>({});
 
-  const isModelDataLoaded = !!Object.keys(cachedModelDataByModel).length;
+  // Flag to indicate whether model data has been loaded.
+  const isModelDataLoaded = !!Object.keys(modelDataByModelId).length;
 
+  // State to store the selected form fields for each model.
   const [selectedFormFieldsByModel, setSelectedFormFieldsByModel] =
     useState<FormOptionsByModelId>(
-      parameters.selectedFieldsAsFormOptionsByModelId ?? {},
+      parameters?.selectedFieldsAsFormOptionsByModelId ?? {},
     );
 
+  // Fetch fields for each related model when relatedModelIds or itemTypes change.
   useEffect(() => {
     const fetchFields = async () => {
       try {
+        // Fetch fields for each related model ID.
         const fieldsFromCtx: ModelDataByModelId = Object.fromEntries(
           await Promise.all(
             relatedModelIds.map(async (modelId) => {
               const fieldsForRelatedModel = await loadItemTypeFields(modelId);
 
+              // Get IDs of fields that are searchable.
               const searchableFieldIds = fieldsForRelatedModel
                 .filter((field) =>
                   SEARCHABLE_FIELD_TYPES.includes(field.attributes.field_type),
@@ -156,12 +80,11 @@ export const FieldConfigScreen = ({ ctx }: PropTypes) => {
 
               const titleFieldId =
                 itemTypes[modelId]?.relationships.title_field.data?.id;
-              const titleFieldApiKey = fieldsForRelatedModel.find(
+              const titleField = fieldsForRelatedModel.find(
                 (field) => field.id === titleFieldId,
-              )?.attributes.api_key;
-              const titleFieldLabel = fieldsForRelatedModel.find(
-                (field) => field.id === titleFieldId,
-              )?.attributes.label;
+              );
+              const titleFieldApiKey = titleField?.attributes.api_key;
+              const titleFieldLabel = titleField?.attributes.label;
 
               const modelData: ModelDataByModelId[string] = {
                 modelLabel: itemTypes[modelId]!.attributes.name,
@@ -174,28 +97,32 @@ export const FieldConfigScreen = ({ ctx }: PropTypes) => {
                 numberOfSearchableFields: searchableFieldIds?.length ?? 0,
               };
 
-              return [modelId, modelData]; // This return shape looks a little weird only because of Object.fromEntries()
+              // Return an entry for Object.fromEntries()
+              return [modelId, modelData];
             }),
           ),
         );
-        setCachedModelDataByModel(fieldsFromCtx);
+        setModelDataByModelId(fieldsFromCtx);
       } catch (error) {
         console.error("Error fetching fields:", error);
       }
     };
 
     fetchFields();
-  }, [relatedModelIds, itemTypes]);
+  }, [relatedModelIds, itemTypes, loadItemTypeFields]);
 
+  // Handle changes to the selected form fields.
   const handleChange = (
     newValue: MultiValue<SwitchFieldOptions>,
     modelId: string,
   ) => {
+    // Update state with new selected fields.
     setSelectedFormFieldsByModel((prevState) => ({
       ...prevState,
       [modelId]: newValue,
     }));
 
+    // Update plugin parameters.
     const newParams: PluginParams = {
       selectedFieldsAsFormOptionsByModelId: {
         ...parameters.selectedFieldsAsFormOptionsByModelId,
@@ -203,7 +130,7 @@ export const FieldConfigScreen = ({ ctx }: PropTypes) => {
       },
       relatedModelsById: {
         ...parameters.relatedModelsById,
-        [modelId]: cachedModelDataByModel[modelId],
+        [modelId]: modelDataByModelId[modelId],
       },
       pluginVersion: "0.0.1",
     };
@@ -214,41 +141,64 @@ export const FieldConfigScreen = ({ ctx }: PropTypes) => {
   return (
     <Canvas ctx={ctx}>
       {isModelDataLoaded ? (
-        <Form style={{paddingBottom: '5em'}}>
+        <Form style={{ paddingBottom: "5em" }}>
           <h3>Which related fields should be searchable?</h3>
-          {Object.entries(cachedModelDataByModel).map(([modelId, model]) => (
-            <div id={modelId} key={modelId}>
-              <h4
-                dangerouslySetInnerHTML={{
-                  __html: `For the "${model.modelLabel}" model (<code>${model.modelApiKey}</code>)`,
-                }}
-              />
-              <SelectField
-                name={modelId}
-                id={modelId}
-                label={`Fields for ${model.modelLabel}`}
-                hint={
-                  "Only string and multi-line text fields can be searched by this plugin."
-                }
-                value={selectedFormFieldsByModel[modelId]}
-                selectInputProps={{
-                  isMulti: true,
-                  options: model.relatedFieldData
-                    .sort(
-                      (a, b) => a.attributes.position - b.attributes.position,
-                    )
-                    .map((field) =>
-                      basicOptionFormatter({
-                        itemId: field.id,
-                        itemLabel: `${field.attributes.label} (${field.attributes.api_key})`,
-                      }),
-                    ),
-                  // formatOptionLabel: optionLabelFormatter // TODO add advanced formatting
-                }}
-                onChange={(newValue) => handleChange(newValue, modelId)}
-              />
-            </div>
-          ))}
+          <p>
+            Please note: Only string and multi-line text fields can be searched
+            by this plugin.
+          </p>
+          {Object.entries(modelDataByModelId).map(([modelId, model]) => {
+            const searchableFields: SwitchFieldOptions[] =
+              model.relatedFieldData
+                .filter((field) =>
+                  SEARCHABLE_FIELD_TYPES.includes(field.attributes.field_type),
+                )
+                .sort((a, b) => a.attributes.position - b.attributes.position)
+                .map((field) =>
+                  basicOptionFormatter({
+                    itemId: field.id,
+                    itemLabel: `${field.attributes.label} (${field.attributes.api_key})`,
+                  }),
+                );
+
+            const numOfNonSearchableFields: number =
+              model.relatedFieldData.length - searchableFields.length;
+
+            return (
+              <div id={modelId} key={modelId}>
+                <SelectField
+                  name={modelId}
+                  id={modelId}
+                  label={
+                    <h4 style={{ margin: 0 }}>
+                      {model.modelLabel} model (<code>{model.modelApiKey}</code>
+                      )
+                    </h4>
+                  }
+                  value={selectedFormFieldsByModel[modelId]}
+                  hint={
+                    <>
+                      {selectedFormFieldsByModel[modelId].length}/
+                      {searchableFields.length} fields selected.{" "}
+                      {numOfNonSearchableFields > 0 && (
+                        <>
+                          This model has {numOfNonSearchableFields} other
+                          non-string fields that cannot be searched by this
+                          plugin.
+                        </>
+                      )}
+                    </>
+                  }
+                  selectInputProps={{
+                    isMulti: true,
+                    options: searchableFields,
+                    // formatOptionLabel: advancedOptionLabelFormatter, // TODO: add advanced formatting
+                  }}
+                  onChange={(newValue) => handleChange(newValue, modelId)}
+                />
+              </div>
+            );
+          })}
         </Form>
       ) : (
         <>
