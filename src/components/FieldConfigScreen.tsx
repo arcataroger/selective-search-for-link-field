@@ -10,12 +10,7 @@ type PropTypes = {
 
 // this is how we want to save our settings
 export type PluginParams = {
-  selectedFieldsByModel: {
-    modelId: string;
-    fieldIds: string[];
-  }[];
-  
-  knownFields: SchemaTypes.Field[] 
+  selectedFieldsByModelId: FormValuesByModelId;
 };
 
 type ValidatorForLinkFields = {
@@ -24,20 +19,22 @@ type ValidatorForLinkFields = {
   };
 };
 
-type FieldsByModel = {
-  id: string;
-  name: string;
-  api_key: string;
-  searchableFields: SchemaTypes.Field[];
-}[];
+type FieldDataByModelId = {
+  [modelId: string]: {
+    modelName: string;
+    modelApiKey: string;
+    fields: SchemaTypes.Field[];
+    searchableFieldIds: string[];
+  };
+};
 
 type SwitchFieldOptions = {
   label: string;
   value: string;
 };
 
-type SelectedFieldsByItemType = {
-  [item_type: string]: MultiValue<SwitchFieldOptions>;
+type FormValuesByModelId = {
+  [modelId: string]: MultiValue<SwitchFieldOptions>;
 };
 
 // We can only use this sort of search on single and multi line string fields
@@ -46,121 +43,101 @@ const SEARCHABLE_FIELD_TYPES: SchemaTypes.FieldAttributes["field_type"][] = [
   "text",
 ];
 
-export const selectedFieldsToPluginParams = (
-  selectedFields: SelectedFieldsByItemType,
-): PluginParams['selectedFieldsByModel'] => {
-  const selectedFieldsByModel = Object.entries(selectedFields).map(
-    ([modelId, fields]) => ({
-      modelId,
-      fieldIds: fields.map((field) => field.value),
-    }),
-  );
-  return selectedFieldsByModel;
-};
-
-export const pluginParamsToSelectedFields = (
-  searchableFieldsByModel: PluginParams['selectedFieldsByModel'],
-  availableFieldsByModel: FieldsByModel,
-): SelectedFieldsByItemType => {
-  const selectedFields: SelectedFieldsByItemType = {};
-  searchableFieldsByModel.forEach(({ modelId, fieldIds }) => {
-    const model = availableFieldsByModel.find((model) => model.id === modelId);
-    if (model) {
-      selectedFields[modelId] = fieldIds
-        .map((fieldId) => {
-          const field = model.searchableFields.find((f) => f.id === fieldId);
-          return field
-            ? { label: field.attributes.label, value: field.id }
-            : null;
-        })
-        .filter(Boolean) as SwitchFieldOptions[];
-    }
-  });
-  return selectedFields;
-};
-
 export const FieldConfigScreen = ({ ctx }: PropTypes) => {
   const {
     pendingField: {
       attributes: { validators },
     },
+    itemTypes,
   } = ctx;
+
+  const { parameters } = ctx as unknown as { parameters: PluginParams };
+
   const {
     item_item_type: { item_types: relatedModelIds },
   } = validators as ValidatorForLinkFields;
 
+  const [validFieldsPerModel, setValidFieldsPerModel] =
+    useState<FieldDataByModelId | null>(null);
 
-  const [fieldsByItemType, setFieldsByItemType] =
-    useState<FieldsByModel | null>(null);
-
-  const [selectedFieldsByModel, setSelectedFieldsByModel] =
-    useState<SelectedFieldsByItemType>({});
+  const [selectedFormFieldsByModel, setSelectedFormFieldsByModel] =
+    useState<FormValuesByModelId>(parameters.selectedFieldsByModelId ?? {});
 
   useEffect(() => {
     const fetchFields = async () => {
-      const fieldsForAllItemTypes: FieldsByModel = await Promise.all(
-        relatedModelIds.map(async (modelId) => {
-          const fieldsForThisItemType = await ctx.loadItemTypeFields(modelId);
-          const searchableFields = fieldsForThisItemType.filter((field) =>
-            SEARCHABLE_FIELD_TYPES.includes(field.attributes.field_type),
-          );
+      try {
+        const fieldsFromCtx = Object.fromEntries(
+          await Promise.all(
+            relatedModelIds.map(async (modelId) => {
+              const fieldsForThisItemType =
+                await ctx.loadItemTypeFields(modelId);
+              const searchableFieldIds = fieldsForThisItemType
+                .filter((field) =>
+                  SEARCHABLE_FIELD_TYPES.includes(field.attributes.field_type),
+                )
+                .map((field) => field.id);
 
-          return {
-            id: modelId,
-            name: ctx.itemTypes[modelId]!.attributes.name,
-            api_key: ctx.itemTypes[modelId]!.attributes.api_key,
-            searchableFields,
-          };
-        }),
-      );
-
-      setFieldsByItemType(fieldsForAllItemTypes);
+              return [
+                modelId,
+                {
+                  modelName: itemTypes[modelId]?.attributes.name,
+                  modelApiKey: itemTypes[modelId]?.attributes.api_key,
+                  fields: fieldsForThisItemType,
+                  searchableFieldIds,
+                },
+              ];
+            }),
+          ),
+        );
+        setValidFieldsPerModel(fieldsFromCtx);
+      } catch (error) {
+        console.error("Error fetching fields:", error);
+      }
     };
 
-    fetchFields().catch((error) => {
-      console.error("Failed to fetch fields:", error);
-    });
-  }, [relatedModelIds]);
+    fetchFields();
+  }, [relatedModelIds, itemTypes]);
 
-  const handleChange = async (
+  const handleChange = (
     newValue: MultiValue<SwitchFieldOptions>,
-    model: FieldsByModel[number],
+    modelId: string,
   ) => {
-    setSelectedFieldsByModel((prevState) => ({
+    setSelectedFormFieldsByModel((prevState) => ({
       ...prevState,
-      [model.id]: newValue,
+      [modelId]: newValue,
     }));
-    try {
-      await ctx.setParameters({...ctx.parameters, selectedFieldsByModel: selectedFieldsToPluginParams(selectedFieldsByModel)});
-    } catch (error) {
-      console.log("Error updating plugin params:", error);
-      await ctx.alert(`Error updating plugin params:  ${error}`);
-    }
+    ctx.setParameters({
+      ...parameters,
+      selectedFieldsByModelId: {
+        ...parameters.selectedFieldsByModelId,
+        [modelId]: newValue,
+      }
+    } as unknown as PluginParams);
   };
 
   return (
     <Canvas ctx={ctx}>
-      {fieldsByItemType ? (
+      {validFieldsPerModel ? (
         <Form>
           <h3>Which related fields should be searchable?</h3>
-          {fieldsByItemType.map((model) => (
-            <div id={model.id} key={model.id}>
+          {Object.entries(validFieldsPerModel).map(([modelId, model]) => (
+            <div id={modelId} key={modelId}>
               <h4
                 dangerouslySetInnerHTML={{
-                  __html: `For the "${model.name}" model (<code>${model.api_key}</code>)`,
+                  __html: `For the "${model.modelName}" model (<code>${model.modelApiKey}</code>)`,
                 }}
               />
               <SelectField
-                name={model.id}
-                id={model.id}
-                label={`Fields for ${model.name}`}
+                name={modelId}
+                id={modelId}
+                label={`Fields for ${model.modelName}`}
                 hint={
                   "Only string and multi-line text fields can be searched by this plugin."
                 }
-                value={selectedFieldsByModel[model.id]}
+                value={selectedFormFieldsByModel[modelId]}
                 selectInputProps={{
                   isMulti: true,
-                  options: model.searchableFields
+                  options: model.fields
                     .sort(
                       (a, b) => a.attributes.position - b.attributes.position,
                     )
@@ -169,7 +146,7 @@ export const FieldConfigScreen = ({ ctx }: PropTypes) => {
                       value: field.id,
                     })),
                 }}
-                onChange={(newValue) => handleChange(newValue, model)}
+                onChange={(newValue) => handleChange(newValue, modelId)}
               />
             </div>
           ))}
