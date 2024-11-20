@@ -1,4 +1,4 @@
-import {AsyncSelectField, Canvas, Form, Spinner} from "datocms-react-ui";
+import { AsyncSelectField, Canvas, Form, Spinner } from "datocms-react-ui";
 import { RenderFieldExtensionCtx } from "datocms-plugin-sdk";
 import {
   basicOptionFormatter,
@@ -10,8 +10,13 @@ import {
   type SimpleSchemaTypes,
 } from "@datocms/cma-client-browser";
 import { useEffect, useState } from "react";
-import type { MultiValue, SingleValue } from "react-select";
-import {debounce} from "../utils/debounce.ts";
+import type {
+  GroupBase,
+  MultiValue,
+  OptionsOrGroups,
+  SingleValue,
+} from "react-select";
+import { debounce } from "../utils/debounce.ts";
 
 type PropTypes = {
   ctx: RenderFieldExtensionCtx;
@@ -20,6 +25,11 @@ type PropTypes = {
 type SingleOrMultiSelectedRecords =
   | MultiValue<SwitchFieldOptions>
   | SingleValue<SwitchFieldOptions>;
+
+type GroupedOptions = OptionsOrGroups<
+  SwitchFieldOptions,
+  GroupBase<SwitchFieldOptions>
+>;
 
 export const SelectiveSearch = ({ ctx }: PropTypes) => {
   const {
@@ -47,16 +57,17 @@ export const SelectiveSearch = ({ ctx }: PropTypes) => {
     );
   }
 
-
   const initialOptions = (() => {
     if (!savedValue?.length) {
-      return null
+      return null;
     }
 
-    const split = savedValue.split(',')
+    const split = savedValue.split(",");
 
-    return split.map(itemId => basicOptionFormatter({itemId, itemLabel: `Loading #${itemId}...`}))
-  })()
+    return split.map((itemId) =>
+      basicOptionFormatter({ itemId, itemLabel: `Loading #${itemId}...` }),
+    );
+  })();
 
   const [selectedOptions, setSelectedOptions] =
     useState<SingleOrMultiSelectedRecords>(initialOptions);
@@ -80,62 +91,85 @@ export const SelectiveSearch = ({ ctx }: PropTypes) => {
     });
   };
 
-  const searchRecords = async (
-    input: string,
-  ): Promise<MultiValue<SwitchFieldOptions>> => {
+  const searchRecords = async (input: string): Promise<GroupedOptions> => {
     if (input.trim() === "") {
-      const relatedModelIds = Object.keys(
-        selectedFieldsAsFormOptionsByModelId,
-      );
+      const relatedModelIds = Object.keys(selectedFieldsAsFormOptionsByModelId);
       const mostRecentRecords = await cmaClient.items.list({
         filter: {
           type: relatedModelIds.join(","),
         },
         order_by: "_updatedAt_DESC",
+        page: {
+          limit: 10,
+        },
       });
 
-      return mostRecentRecords.map((item) => itemToOption(item));
+      console.log("mostRecentRecords", mostRecentRecords);
+
+      let optionsByModel: { [modelLabel: string]: SwitchFieldOptions[] } = {};
+
+      for (const item of mostRecentRecords) {
+        const { modelLabel } = relatedModelsById[item.item_type.id];
+        // Ensure optionsByModel[modelLabel] is initialized
+        if (!optionsByModel[modelLabel]) {
+          optionsByModel[modelLabel] = [];
+        }
+        optionsByModel[modelLabel].push(itemToOption(item));
+      }
+
+      console.log("optionsByModel", optionsByModel);
+
+      return Object.entries(optionsByModel).map(([label, options]) => ({
+        label,
+        options,
+      }));
     }
 
     const results = await Promise.all(
       Object.entries(selectedFieldsAsFormOptionsByModelId).map(
-        ([modelId, formValues]) => {
-          const { relatedFieldData } = relatedModelsById[modelId];
+        async ([modelId, fieldsToSearchAsFormOptions]) => {
+          const { relatedFieldData, modelLabel } = relatedModelsById[modelId];
 
-          const fieldFilters = formValues.map((formValue) => {
-            const fieldId = formValue.value;
-            const fieldDataFromPluginParams = relatedFieldData.find(
-              (field) => field.id === fieldId,
-            );
-            if (!fieldDataFromPluginParams) return [];
-            const {
-              attributes: { api_key },
-            } = fieldDataFromPluginParams;
-            return {
-              [api_key]: {
-                matches: {
-                  pattern: input,
+          const fieldFilters = fieldsToSearchAsFormOptions.map(
+            (fieldAsOption) => {
+              const fieldId = fieldAsOption.value;
+              const fieldDataFromPluginParams = relatedFieldData.find(
+                (field) => field.id === fieldId,
+              );
+              if (!fieldDataFromPluginParams) return [];
+              const {
+                attributes: { api_key },
+              } = fieldDataFromPluginParams;
+              return {
+                [api_key]: {
+                  matches: {
+                    pattern: input,
+                  },
                 },
-              },
-            };
-          });
+              };
+            },
+          );
 
           const generatedFilter = {
             type: modelId,
             fields: { OR: fieldFilters[0] }, // TODO make the OR filter work
           };
 
-          return cmaClient.items.list({
+          const records = await cmaClient.items.list({
             filter: generatedFilter,
           });
+
+          const options = records.map((item) => itemToOption(item));
+
+          return {
+            label: modelLabel,
+            options,
+          };
         },
       ),
     );
 
-    const flattenedResults = results.flatMap((model) => model);
-    console.log(flattenedResults);
-    const formattedResults = flattenedResults.map((item) => itemToOption(item));
-    return formattedResults;
+    return results;
   };
 
   const handleChange = (formValue: SingleOrMultiSelectedRecords) => {
@@ -153,6 +187,9 @@ export const SelectiveSearch = ({ ctx }: PropTypes) => {
 
   useEffect(() => {
     (async () => {
+      if (!savedValue) {
+        return;
+      }
       if (Array.isArray(savedValue)) {
         const records = await cmaClient.items.list({
           filter: { ids: savedValue.join() },
@@ -165,7 +202,6 @@ export const SelectiveSearch = ({ ctx }: PropTypes) => {
       }
     })();
   }, [savedValue]);
-
 
   const selectFieldId = `${fieldPath}-selective-search}`;
 
@@ -182,8 +218,12 @@ export const SelectiveSearch = ({ ctx }: PropTypes) => {
             loadOptions: debounce(searchRecords),
             isClearable: true,
             defaultOptions: true,
-            loadingMessage: () => <span><Spinner/> Searching...</span>,
-            noOptionsMessage: () => 'No matching records found.',
+            loadingMessage: () => (
+              <span>
+                <Spinner /> Searching...
+              </span>
+            ),
+            noOptionsMessage: () => "No matching records found.",
           }}
           value={selectedOptions}
           onChange={(newValue) =>
