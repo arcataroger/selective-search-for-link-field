@@ -54,15 +54,18 @@ export const basicOptionFormatter = ({
   itemId,
   itemLabel,
   modelLabel,
+                                       showItemIdWithModelLabel=false,
 }: {
   itemId: string;
   itemLabel?: string;
   modelLabel?: string;
+  showItemIdWithModelLabel?: boolean;
 }): SwitchFieldOptions => {
   // Generate a label... this was clearer than a multi-level nested ternary
   const label: string = (() => {
     if (itemLabel && modelLabel) {
-      return `${itemLabel} (${modelLabel} #${itemId})`;
+      if (showItemIdWithModelLabel) {return `${itemLabel} (${modelLabel} #${itemId})`}
+      return `${itemLabel} (${modelLabel})`
     }
 
     if (itemLabel && !modelLabel) {

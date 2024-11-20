@@ -44,7 +44,7 @@ export const SelectiveSearch = ({ ctx }: PropTypes) => {
     parameters as PluginParams;
 
   const isMultiLinkField = field.attributes.field_type === "links";
-  const savedValue = formValues[fieldPath] as string; // A single link is a record ID, multiple ones are comma-separated one
+  const currentFieldValue = formValues[fieldPath] as string; // A single link is a record ID, multiple ones are comma-separated one
 
   if (!currentUserAccessToken) {
     return (
@@ -58,11 +58,11 @@ export const SelectiveSearch = ({ ctx }: PropTypes) => {
   }
 
   const initialOptions = (() => {
-    if (!savedValue?.length) {
+    if (!currentFieldValue?.length) {
       return null;
     }
 
-    const split = savedValue.split(",");
+    const split = currentFieldValue.split(",");
 
     return split.map((itemId) =>
       basicOptionFormatter({ itemId, itemLabel: `Loading #${itemId}...` }),
@@ -76,7 +76,7 @@ export const SelectiveSearch = ({ ctx }: PropTypes) => {
     apiToken: currentUserAccessToken,
   });
 
-  const itemToOption = (item: SimpleSchemaTypes.Item): SwitchFieldOptions => {
+  const itemToOption = (item: SimpleSchemaTypes.Item, showItemIdWithModelLabel=false, showModel=true): SwitchFieldOptions => {
     const modelInfo = relatedModelsById[item.item_type.id];
     const { titleFieldApiKey, modelLabel } = modelInfo;
 
@@ -87,11 +87,12 @@ export const SelectiveSearch = ({ ctx }: PropTypes) => {
     return basicOptionFormatter({
       itemId: item.id,
       itemLabel,
-      modelLabel,
+      ...(showModel && {modelLabel}),
+      showItemIdWithModelLabel: showItemIdWithModelLabel,
     });
   };
 
-  const searchRecords = async (input: string): Promise<GroupedOptions> => {
+  const performSearch = async (input: string): Promise<GroupedOptions> => {
     if (input.trim() === "") {
       const relatedModelIds = Object.keys(selectedFieldsAsFormOptionsByModelId);
       const mostRecentRecords = await cmaClient.items.list({
@@ -130,34 +131,39 @@ export const SelectiveSearch = ({ ctx }: PropTypes) => {
         async ([modelId, fieldsToSearchAsFormOptions]) => {
           const { relatedFieldData, modelLabel } = relatedModelsById[modelId];
 
-          const fieldFilters = fieldsToSearchAsFormOptions.map(
-            (fieldAsOption) => {
-              const fieldId = fieldAsOption.value;
-              const fieldDataFromPluginParams = relatedFieldData.find(
-                (field) => field.id === fieldId,
-              );
-              if (!fieldDataFromPluginParams) return [];
-              const {
-                attributes: { api_key },
-              } = fieldDataFromPluginParams;
-              return {
-                [api_key]: {
-                  matches: {
-                    pattern: input,
+          // TODO once the boolean OR bug is fixed, replace these separate queries with one per model
+          const queries: SimpleSchemaTypes.ItemInstancesHrefSchema[] = fieldsToSearchAsFormOptions.flatMap((fieldAsOption) => {
+            const fieldId = fieldAsOption.value;
+            const fieldDataFromPluginParams = relatedFieldData.find(
+                (field) => field.id === fieldId
+            );
+
+            if (!fieldDataFromPluginParams) return []; // Return an empty array to exclude this field.
+
+            const {
+              attributes: { api_key },
+            } = fieldDataFromPluginParams;
+
+            return {
+              filter: {
+                type: modelId,
+                fields: {
+                  [api_key]: {
+                    matches: {
+                      pattern: input.trim(),
+                    },
                   },
                 },
-              };
-            },
-          );
-
-          const generatedFilter = {
-            type: modelId,
-            fields: { OR: fieldFilters[0] }, // TODO make the OR filter work
-          };
-
-          const records = await cmaClient.items.list({
-            filter: generatedFilter,
+              },
+            };
           });
+
+
+          const records = (
+              await Promise.all(
+                  queries.map(async (query) => await cmaClient.items.list(query))
+              )
+          ).flat();
 
           const options = records.map((item) => itemToOption(item));
 
@@ -187,21 +193,21 @@ export const SelectiveSearch = ({ ctx }: PropTypes) => {
 
   useEffect(() => {
     (async () => {
-      if (!savedValue) {
+      if (!currentFieldValue) {
         return;
       }
-      if (Array.isArray(savedValue)) {
+      if (Array.isArray(currentFieldValue)) {
         const records = await cmaClient.items.list({
-          filter: { ids: savedValue.join() },
+          filter: { ids: currentFieldValue.join() },
         });
         const formattedOptions = records.map((item) => itemToOption(item));
         setSelectedOptions(formattedOptions);
       } else {
-        const record = await cmaClient.items.find(savedValue);
-        setSelectedOptions(itemToOption(record));
+        const record = await cmaClient.items.find(currentFieldValue);
+        setSelectedOptions(itemToOption(record, false));
       }
     })();
-  }, [savedValue]);
+  }, [currentFieldValue]);
 
   const selectFieldId = `${fieldPath}-selective-search}`;
 
@@ -215,7 +221,7 @@ export const SelectiveSearch = ({ ctx }: PropTypes) => {
           selectInputProps={{
             isMulti: isMultiLinkField,
             cacheOptions: true,
-            loadOptions: debounce(searchRecords),
+            loadOptions: debounce(performSearch),
             isClearable: true,
             defaultOptions: true,
             loadingMessage: () => (
@@ -223,16 +229,13 @@ export const SelectiveSearch = ({ ctx }: PropTypes) => {
                 <Spinner /> Searching...
               </span>
             ),
-            noOptionsMessage: () => "No matching records found.",
+            noOptionsMessage: ({inputValue}) => `No matches for "${inputValue}"`,
           }}
           value={selectedOptions}
           onChange={(newValue) =>
             handleChange(newValue as SingleOrMultiSelectedRecords)
           }
         />
-        <pre>Form data: {JSON.stringify(savedValue, null, 2)}</pre>
-        <pre>State: {JSON.stringify(selectedOptions, null, 2)}</pre>
-        <pre>Params: {JSON.stringify(parameters, null, 2)}</pre>
       </Form>
     </Canvas>
   );
