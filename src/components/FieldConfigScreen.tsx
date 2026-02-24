@@ -52,6 +52,10 @@ export const FieldConfigScreen = ({
   const [modelDataByModelId, setModelDataByModelId] =
     useState<ModelDataByModelId>({});
 
+  useEffect(() => {
+    console.log('model data by model id', modelDataByModelId);
+  }, [modelDataByModelId]);
+
   // Flag to indicate whether model data has been loaded.
   const isModelDataLoaded = !!Object.keys(modelDataByModelId).length;
 
@@ -65,6 +69,7 @@ export const FieldConfigScreen = ({
   useEffect(() => {
     const fetchFields = async () => {
       try {
+        console.log('fetching fields');
         // Fetch fields for each related model ID.
         const fieldsFromCtx: ModelDataByModelId = Object.fromEntries(
           await Promise.all(
@@ -102,6 +107,7 @@ export const FieldConfigScreen = ({
             }),
           ),
         );
+        console.log('fields by ctx', fieldsFromCtx);
         setModelDataByModelId(fieldsFromCtx);
       } catch (error) {
         console.error("Error fetching fields:", error);
@@ -132,8 +138,10 @@ export const FieldConfigScreen = ({
         ...parameters.relatedModelsById,
         [modelId]: modelDataByModelId[modelId],
       },
-      pluginVersion: "0.0.1",
+      pluginVersion: "0.0.2",
     };
+
+    console.log('newParams', newParams);
 
     setParameters(newParams);
   };

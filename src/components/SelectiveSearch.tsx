@@ -183,7 +183,7 @@ export const SelectiveSearch = ({ ctx }: { ctx: RenderFieldExtensionCtx }) => {
           // Execute all queries and flatten the results.
           const records = (
             await Promise.all(
-              queries.map(async (query) => await cmaClient.items.list(query)),
+              queries.map(async (query) => await cmaClient.items.list({...query, nested: true})),
             )
           ).flat();
 
@@ -268,6 +268,11 @@ export const SelectiveSearch = ({ ctx }: { ctx: RenderFieldExtensionCtx }) => {
             ),
             noOptionsMessage: ({ inputValue }) =>
               `No matches for "${inputValue}"`,
+            onMenuOpen: () => {
+              console.log("menu opened");
+              ctx.stopAutoResizer();
+              ctx.updateHeight(500);
+            },
           }}
           value={selectedOptions}
           onChange={(newValue) =>
