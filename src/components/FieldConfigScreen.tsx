@@ -2,7 +2,7 @@ import {RenderManualFieldExtensionConfigScreenCtx} from "datocms-plugin-sdk";
 import {Canvas, Form, SelectField, Spinner} from "datocms-react-ui";
 import type {SchemaTypes} from "@datocms/cma-client";
 import type {MultiValue} from "react-select";
-import {useEffect, useState} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
     FormOptionsByModelId,
     ModelDataByModelId,
@@ -43,17 +43,34 @@ export const FieldConfigScreen = ({
   // Extract plugin parameters from context.
   const { parameters } = ctx as unknown as { parameters: PluginParams };
 
-  // Get the list of related model IDs from the field validators.
-  const {
-    item_item_type: { item_types: relatedModelIds },
-  } = validators as ValidatorForLinkFields;
+  // Get and memoize the list of related model IDs from the field validators.
+  const relatedModelIdsRef = useRef<string[]>([]);
+
+  const relatedModelIds = useMemo(() => {
+    const {
+      item_item_type: { item_types },
+    } = validators as ValidatorForLinkFields;
+
+    const sorted = [...item_types].sort();
+
+    // Return the previous reference if values are identical (stable identity for downstream deps)
+    const prev = relatedModelIdsRef.current;
+    if (
+      sorted.length === prev.length &&
+      sorted.every((id, i) => id === prev[i])
+    ) {
+      return prev;
+    }
+
+    relatedModelIdsRef.current = sorted;
+    return sorted;
+  }, [validators]);
 
   // State to store data about related models.
   const [modelDataByModelId, setModelDataByModelId] =
     useState<ModelDataByModelId>({});
 
   useEffect(() => {
-    console.log('model data by model id', modelDataByModelId);
   }, [modelDataByModelId]);
 
   // Flag to indicate whether model data has been loaded.
@@ -65,11 +82,11 @@ export const FieldConfigScreen = ({
       parameters?.selectedFieldsAsFormOptionsByModelId ?? {},
     );
 
+
   // Fetch fields for each related model when relatedModelIds or itemTypes change.
   useEffect(() => {
     const fetchFields = async () => {
       try {
-        console.log('fetching fields');
         // Fetch fields for each related model ID.
         const fieldsFromCtx: ModelDataByModelId = Object.fromEntries(
           await Promise.all(
@@ -107,15 +124,13 @@ export const FieldConfigScreen = ({
             }),
           ),
         );
-        console.log('fields by ctx', fieldsFromCtx);
         setModelDataByModelId(fieldsFromCtx);
       } catch (error) {
-        console.error("Error fetching fields:", error);
       }
     };
 
     fetchFields();
-  }, [relatedModelIds, itemTypes, loadItemTypeFields]);
+  }, [relatedModelIds, itemTypes]);
 
   // Handle changes to the selected form fields.
   const handleChange = (
@@ -141,7 +156,6 @@ export const FieldConfigScreen = ({
       pluginVersion: "0.0.2",
     };
 
-    console.log('newParams', newParams);
 
     setParameters(newParams);
   };
@@ -183,10 +197,10 @@ export const FieldConfigScreen = ({
                       )
                     </h4>
                   }
-                  value={selectedFormFieldsByModel[modelId]}
+                  value={selectedFormFieldsByModel?.modelId}
                   hint={
                     <>
-                      {selectedFormFieldsByModel[modelId].length}/
+                      {selectedFormFieldsByModel?.modelId?.length ?? 0}/
                       {searchableFields.length} fields selected.{" "}
                       {numOfNonSearchableFields > 0 && (
                         <>
