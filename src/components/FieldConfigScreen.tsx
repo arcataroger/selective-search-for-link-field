@@ -70,18 +70,14 @@ export const FieldConfigScreen = ({
   const [modelDataByModelId, setModelDataByModelId] =
     useState<ModelDataByModelId>({});
 
-  useEffect(() => {
-  }, [modelDataByModelId]);
-
   // Flag to indicate whether model data has been loaded.
   const isModelDataLoaded = !!Object.keys(modelDataByModelId).length;
 
   // State to store the selected form fields for each model.
   const [selectedFormFieldsByModel, setSelectedFormFieldsByModel] =
     useState<FormOptionsByModelId>(
-      parameters?.selectedFieldsAsFormOptionsByModelId ?? {},
+      parameters.selectedFieldsAsFormOptionsByModelId,
     );
-
 
   // Fetch fields for each related model when relatedModelIds or itemTypes change.
   useEffect(() => {
@@ -133,7 +129,7 @@ export const FieldConfigScreen = ({
   }, [relatedModelIds, itemTypes]);
 
   // Handle changes to the selected form fields.
-  const handleChange = (
+  const handleChange = async (
     newValue: MultiValue<SwitchFieldOptions>,
     modelId: string,
   ) => {
@@ -156,8 +152,7 @@ export const FieldConfigScreen = ({
       pluginVersion: "0.0.2",
     };
 
-
-    setParameters(newParams);
+    await setParameters(newParams);
   };
 
   return (
@@ -197,10 +192,10 @@ export const FieldConfigScreen = ({
                       )
                     </h4>
                   }
-                  value={selectedFormFieldsByModel?.modelId}
+                  value={selectedFormFieldsByModel[modelId]}
                   hint={
                     <>
-                      {selectedFormFieldsByModel?.modelId?.length ?? 0}/
+                      {selectedFormFieldsByModel?.[modelId]?.length ?? 0}/
                       {searchableFields.length} fields selected.{" "}
                       {numOfNonSearchableFields > 0 && (
                         <>
