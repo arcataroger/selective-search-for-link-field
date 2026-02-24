@@ -76,8 +76,12 @@ export const FieldConfigScreen = ({
   // State to store the selected form fields for each model.
   const [selectedFormFieldsByModel, setSelectedFormFieldsByModel] =
     useState<FormOptionsByModelId>(
-      parameters.selectedFieldsAsFormOptionsByModelId,
+      parameters?.selectedFieldsAsFormOptionsByModelId ?? {},
     );
+
+  useEffect(() => {
+    console.log('parameters', parameters);
+  }, [parameters]);
 
   // Fetch fields for each related model when relatedModelIds or itemTypes change.
   useEffect(() => {
